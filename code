@@ -1,0 +1,109 @@
+#include <LiquidCrystal.h>
+
+// Define pins for the components
+const int redLEDPin = 13; // Red LED pin
+const int greenLEDPin = 12; // Green LED pin
+const int resetButtonPin = 2; // Button "R" to start/end election
+const int partyButtons[4] = {16, 5, 4, 0}; // Buttons for 4 parties
+
+// Debounce delay to prevent multiple triggers from button press noise
+const unsigned long debounceDelay = 50;
+
+int votes[4] = {0}; // Array to store votes for each party
+unsigned long lastVoteTime = millis(); // Variable to track when the last vote was cast
+
+void setup() {
+    Serial.begin(115200);
+    
+    pinMode(redLEDPin, OUTPUT);
+    pinMode(greenLEDPin, OUTPUT);
+    
+    digitalWrite(redLEDPin, HIGH); // Start with red LED on
+    
+    pinMode(resetButtonPin, INPUT_PULLUP); 
+    
+    for (int i = 0; i < 4; i++) {
+        pinMode(partyButtons[i], INPUT_PULLUP);
+    }
+    
+    Serial.println("Smart Voting System");
+}
+
+void loop() {
+    static bool electionActive = false;
+    static unsigned long lastDebounceTime = millis();
+    
+    if (digitalRead(resetButtonPin) == LOW && millis() - lastDebounceTime > debounceDelay) {
+        lastDebounceTime = millis(); // Update debounce timer
+        
+        if (!electionActive) {
+            electionActive = true;
+            digitalWrite(redLEDPin, LOW); // Turn off red LED
+            blinkGreenLED(); // Blink green LED to indicate start of election
+            startElection();
+        } else {
+            electionActive = false;
+            endElection();
+        }
+    }
+
+    if (electionActive) {
+        bool voteCast = false;
+        
+        for (int i = 0; i < 4 && !voteCast; i++) {
+            if (digitalRead(partyButtons[i]) == LOW && millis() - lastDebounceTime > debounceDelay) {
+                lastDebounceTime = millis(); // Update debounce timer
+                
+                votes[i]++;
+                keepGreenLEDOn(); // Keep green LED on for 3 seconds after vote
+                
+                lastVoteTime = millis(); // Record the time of vote
+                voteCast = true;
+            }
+        }
+        
+        if (!voteCast && (millis() - lastVoteTime > 3500)) { 
+            blinkGreenLED(); // Blink green LED if no vote is cast within 3.5 seconds
+            lastVoteTime = millis(); // Resetting the timer to continue blinking.
+        }
+    }
+}
+
+void blinkGreenLED() {
+    digitalWrite(greenLEDPin, HIGH);
+    delay(100); 
+    digitalWrite(greenLEDPin, LOW);
+}
+
+void keepGreenLEDOn() {
+    digitalWrite(greenLEDPin, HIGH);
+    delay(3000);
+    digitalWrite(greenLEDPin, LOW);
+}
+
+void startElection() {
+    Serial.println("Election started. Please cast your votes.");
+}
+
+void endElection() {
+   Serial.println("Election ended. Here are the results:");
+
+   int highestVotesIndex = 0;
+
+   for(int i = 0; i < 4; i++){
+       Serial.print("Party ");
+       Serial.print(i + 1);
+       Serial.print(": ");
+       Serial.println(votes[i]);
+       
+       if(votes[highestVotesIndex] < votes[i])
+           highestVotesIndex = i;
+       
+       votes[i] = 0; // Resetting votes count after displaying results.
+   }
+
+   Serial.print("Winner is: Party ");
+  Serial.println(highestVotesIndex + 1);
+
+   digitalWrite(redLEDPin, HIGH); // Turn on red LED after election is over.
+}
